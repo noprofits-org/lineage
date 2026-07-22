@@ -9,6 +9,7 @@ import {
   completeFetch,
   admit,
   disclosure,
+  doiHref,
   NODE_CAP,
   BATCH,
 } from '../../main.js'
@@ -68,6 +69,8 @@ test('newExpansion starts at offset zero with a distinct empty pool', () => {
     total: 9,
     exhausted: false,
     pool: [],
+    pagesFetched: 0,
+    _seenPaperIds: new Set(),
   })
   assert.notEqual(first.pool, second.pool)
 })
@@ -124,6 +127,28 @@ test('completeFetch treats an absent next offset as exhaustion', () => {
   completeFetch(expansion, { papers: [paper('a', 1990)], next: undefined })
   assert.equal(expansion.exhausted, true)
   assert.equal(expansion.nextOffset, null)
+})
+
+test('completeFetch deduplicates papers repeated across shifting offset pages', () => {
+  const state = createState()
+  const seed = addPaper(state, paper('seed', 1953, 2))
+  const expansion = seed.expansion.citations
+
+  completeFetch(expansion, {
+    papers: [paper('a', 1960, 10), paper('b', 1961, 9)],
+    next: 500,
+  })
+  admit(state, seed, 'citations')
+  completeFetch(expansion, {
+    papers: [paper('b', 1961, 9)],
+    next: null,
+  })
+  const secondAdmission = admit(state, seed, 'citations')
+
+  assert.equal(expansion.fetchedCount, 2)
+  assert.equal(expansion.displayedCount, 2)
+  assert.equal(state.edges.size, 2)
+  assert.equal(secondAdmission.admitted.length, 0)
 })
 
 test('admit takes the top batch in rank order and wires both edge directions', () => {
@@ -259,5 +284,38 @@ test('disclosure returns the three exact truthfulness tiers', () => {
   assert.equal(
     disclosure(incomplete, 'citations'),
     'showing top 25 of the first 500 fetched (8,412 total)',
+  )
+})
+
+test('disclosure drops the global top claim after multiple ranked pages', () => {
+  const expansion = newExpansion(1_000)
+  completeFetch(expansion, {
+    papers: Array.from(
+      { length: 500 },
+      (_, index) => paper(`first-${index}`, 1960, index),
+    ),
+    next: 500,
+  })
+  expansion.displayedCount = 500
+  expansion.pool = []
+  completeFetch(expansion, {
+    papers: Array.from(
+      { length: 500 },
+      (_, index) => paper(`second-${index}`, 1970, 10_000 - index),
+    ),
+    next: null,
+  })
+  expansion.displayedCount = 525
+
+  assert.equal(
+    disclosure(expansion, 'citations'),
+    'showing 525 of 1,000 citations',
+  )
+})
+
+test('doiHref preserves DOI slashes while escaping query and fragment delimiters', () => {
+  assert.equal(
+    doiHref('10.1234/a?b#c%25'),
+    'https://doi.org/10.1234/a%3Fb%23c%2525',
   )
 })

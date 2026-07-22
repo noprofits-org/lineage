@@ -14,6 +14,7 @@ export async function stubApi(page, fixtures, overrides = {}) {
     for (const [suffix, resp] of Object.entries(overrides)) {
       if (p.endsWith(suffix)) {
         const r = typeof resp === 'function' ? await resp(url) : resp
+        if (r.abort) return route.abort(r.abort)
         return route.fulfill({ status: r.status ?? 200, headers: r.headers ?? {}, json: r.json ?? r })
       }
     }

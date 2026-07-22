@@ -90,11 +90,12 @@ test('network errors retry and exhaustion yields a retryable S2Error', async () 
 })
 
 test('retry exhaustion preserves the final HTTP status', async () => {
-  const { client } = makeClient([err(503), err(503), err(503), err(503)])
+  const { client, statuses } = makeClient([err(503), err(503), err(503), err(503)])
   await assert.rejects(
     () => client.search('q'),
     error => error instanceof S2Error && error.status === 503 && error.retryable === true,
   )
+  assert.equal(statuses.at(-1).message, 'Semantic Scholar is temporarily unavailable')
 })
 
 test('a failed request does not wedge the queue', async () => {
@@ -108,6 +109,21 @@ test('stale check before fetch drops a queued request', async () => {
   const { client, calls } = makeClient([ok({ data: [] })])
   await assert.rejects(
     () => client.connections('p1', 'citations', 0, () => true),
+    error => error instanceof StaleError,
+  )
+  assert.equal(calls.length, 0)
+})
+
+test('search and paper reads accept the same stale queue contract', async () => {
+  const { client, calls } = makeClient([])
+  const stale = () => true
+
+  await assert.rejects(
+    () => client.search('superseded', stale),
+    error => error instanceof StaleError,
+  )
+  await assert.rejects(
+    () => client.paper('old-selection', stale),
     error => error instanceof StaleError,
   )
   assert.equal(calls.length, 0)
@@ -142,6 +158,7 @@ test('paper ids are URL encoded and invalid connection directions are rejected',
 test('memory-only cache note is emitted once', async () => {
   const { client, statuses } = makeClient([ok({ data: [] }), ok({ data: [] })])
   await client.search('a')
+  assert.equal(statuses.at(-1).state, 'note')
   await client.search('b')
   assert.equal(
     statuses.filter(status => status.state === 'note').length,

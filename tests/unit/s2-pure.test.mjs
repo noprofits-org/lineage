@@ -82,11 +82,12 @@ test('isRetryable accepts 429, 5xx, and network errors, but not ordinary 4xx', (
 
 test('backoffDelay honors Retry-After and otherwise uses capped full jitter', () => {
   assert.equal(backoffDelay(0, 7), 7000)
-  assert.equal(backoffDelay(0, 90), 30000)
+  assert.equal(backoffDelay(0, 90), 90000)
   assert.equal(backoffDelay(0, null, () => 0.5), 500)
   assert.equal(backoffDelay(2, null, () => 0.5), 2000)
   assert.equal(backoffDelay(10, null, () => 0.999), 29970)
   assert.equal(backoffDelay(0, -4, () => 0.5), 500)
+  assert.equal(backoffDelay(0, '', () => 0.5), 500)
 })
 
 test('constants match the API contract', () => {

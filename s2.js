@@ -52,10 +52,11 @@ export function backoffDelay(attempt, retryAfterSeconds, rand = Math.random) {
   if (
     retryAfterSeconds !== null
     && retryAfterSeconds !== undefined
+    && String(retryAfterSeconds).trim() !== ''
     && Number.isFinite(retryAfter)
     && retryAfter >= 0
   ) {
-    return Math.min(retryAfter * 1000, MAX_DELAY_MS)
+    return retryAfter * 1000
   }
 
   const safeAttempt = Math.max(0, Number.isFinite(attempt) ? attempt : 0)
@@ -104,7 +105,7 @@ export function createCache(storage, { maxBytes = CACHE_MAX_BYTES } = {}) {
     const position = index.findIndex(entry => entry.k === key)
     let entry
     if (position >= 0) {
-      ;[entry] = index.splice(position, 1)
+      entry = index.splice(position, 1)[0]
     } else if (raw !== undefined) {
       entry = { k: key, n: byteLength(raw) + byteLength(key) + 24 }
     } else {
@@ -210,11 +211,13 @@ function retryAfterSeconds(headers) {
   if (!headers || typeof headers.get !== 'function') return null
   const raw = headers.get('Retry-After')
   if (raw == null) return null
+  const text = String(raw).trim()
+  if (!text) return null
 
-  const numeric = Number(raw)
+  const numeric = Number(text)
   if (Number.isFinite(numeric) && numeric >= 0) return numeric
 
-  const date = Date.parse(raw)
+  const date = Date.parse(text)
   if (Number.isNaN(date)) return null
   return Math.max(0, (date - Date.now()) / 1000)
 }
@@ -293,9 +296,11 @@ export class S2Client {
           this.cache.set(url, json)
           if (this.cache.diskDisabled() && !this.cacheNoteSent) {
             this.cacheNoteSent = true
+            this.#emit({ state: 'idle' })
             this.#emit({ state: 'note', message: 'local cache unavailable — using memory only' })
+          } else {
+            this.#emit({ state: 'idle' })
           }
-          this.#emit({ state: 'idle' })
           return json
         }
       }
@@ -322,7 +327,10 @@ export class S2Client {
       }
     }
 
-    this.#emit({ state: 'error', message: 'request failed after retries', retryable: true })
+    const exhaustedMessage = lastStatus === 429
+      ? 'Semantic Scholar is still rate limiting requests'
+      : 'Semantic Scholar is temporarily unavailable'
+    this.#emit({ state: 'error', message: exhaustedMessage, retryable: true })
     throw new S2Error(lastStatus, true)
   }
 
@@ -330,15 +338,21 @@ export class S2Client {
     try { this.onStatus(status) } catch {}
   }
 
-  search(query) {
+  search(query, isStale = () => false) {
     return this
-      .request(`/paper/search?query=${encodeURIComponent(query)}&fields=${PAPER_FIELDS}&limit=10`)
+      .request(
+        `/paper/search?query=${encodeURIComponent(query)}&fields=${PAPER_FIELDS}&limit=10`,
+        isStale,
+      )
       .then(json => (Array.isArray(json?.data) ? json.data : []).map(mapPaper).filter(Boolean))
   }
 
-  paper(id) {
+  paper(id, isStale = () => false) {
     return this
-      .request(`/paper/${encodeURIComponent(id)}?fields=${PAPER_FIELDS},abstract`)
+      .request(
+        `/paper/${encodeURIComponent(id)}?fields=${PAPER_FIELDS},abstract`,
+        isStale,
+      )
       .then(mapPaper)
   }
 

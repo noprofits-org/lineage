@@ -10,5 +10,9 @@ test('shell renders: wordmark, search, empty state with convention text', async 
   await expect(page.locator('#empty')).toContainText('Search for a paper')
   await expect(page.locator('#empty .convention')).toContainText('from the citing paper to the cited paper')
   await expect(page.locator('.example-query')).toHaveCount(3)
+  await page.locator('#about summary').click()
+  await expect(page.locator('#about .about-copy')).toContainText(
+    'Edges encode citation, from the citing paper to the cited paper',
+  )
   await expect(page.locator('#status')).toHaveText('ready')
 })

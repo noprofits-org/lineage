@@ -13,9 +13,9 @@
     <form id="search-form" role="search">
       <input id="search" type="search" placeholder="Search for a paper…"
              aria-label="Search for a paper" autocomplete="off">
+      <ul id="results" role="listbox" aria-label="Search results" hidden></ul>
     </form>
     <button id="reset" type="button" hidden>reset</button>
-    <ul id="results" role="listbox" aria-label="Search results" hidden></ul>
   </header>
 
   <main>
@@ -36,6 +36,10 @@
       <h2 data-testid="insp-title"></h2>
       <p class="meta" data-testid="insp-meta"></p>
       <p class="counts mono" data-testid="insp-counts"></p>
+      <div class="expansion-status" aria-label="Expansion status">
+        <p class="mono" data-testid="references-status" hidden></p>
+        <p class="mono" data-testid="citations-status" hidden></p>
+      </div>
       <p class="abstract" data-testid="insp-abstract"></p>
       <p class="links" data-testid="insp-links"></p>
       <div class="actions">
@@ -53,6 +57,15 @@
   <footer>
     <span id="status" role="status" aria-live="polite">ready</span>
     <button id="retry" type="button" hidden>retry</button>
+    <details id="about">
+      <summary>about</summary>
+      <div class="about-copy">
+        <strong>How to read Lineage</strong>
+        <p>Edges encode citation, from the citing paper to the cited paper —
+          usually, but not always, newer to older. Read the graph left-to-right as
+          intellectual influence.</p>
+      </div>
+    </details>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"

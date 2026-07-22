@@ -95,6 +95,20 @@ test('load more fetches the next pool page only after the current pool is exhaus
   await expect(page.locator('#status')).toHaveText('showing 30 of 30 citations')
 })
 
+test('load more stays available when the other direction still has undisplayed papers', async ({ page }) => {
+  await stubApi(page, fixtures)
+  await seedPage(page)
+  await page.getByTestId('expand-citations').click()      // 25 shown, 5 left in pool
+  await expect(page.locator('.node')).toHaveCount(26)
+  await page.getByTestId('expand-references').click()     // exhausted after 3
+  await expect(page.locator('.node')).toHaveCount(29)
+  // References are exhausted, but 5 citations remain — the button must not hide.
+  await expect(page.getByTestId('load-more')).toBeVisible()
+  await page.getByTestId('load-more').click()
+  await expect(page.locator('.node')).toHaveCount(34)     // the 5 leftover citations
+  await expect(page.getByTestId('load-more')).toBeHidden()
+})
+
 test('double-click on expand fires one request', async ({ page }) => {
   await stubApi(page, fixtures)
   await seedPage(page)

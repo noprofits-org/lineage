@@ -177,7 +177,7 @@ test('isRetryable: 429/5xx/network yes, 400/404 no', () => {
 
 test('backoffDelay: honors Retry-After, else full jitter under 2^attempt seconds, capped at 30s', () => {
   assert.equal(backoffDelay(0, 7), 7000)
-  assert.equal(backoffDelay(0, 90), 90000)                     // Retry-After honored
+  assert.equal(backoffDelay(0, 90), 30000)                     // Retry-After capped
   assert.equal(backoffDelay(0, null, () => 0.5), 500)          // 0.5 * 1000
   assert.equal(backoffDelay(2, null, () => 0.5), 2000)         // 0.5 * 4000
   assert.equal(backoffDelay(10, null, () => 0.999), 29970)     // capped at 30000

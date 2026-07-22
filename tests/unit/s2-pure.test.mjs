@@ -80,9 +80,9 @@ test('isRetryable accepts 429, 5xx, and network errors, but not ordinary 4xx', (
   assert.equal(isRetryable(404), false)
 })
 
-test('backoffDelay honors Retry-After and otherwise uses capped full jitter', () => {
+test('backoffDelay honors Retry-After up to the 30s cap, else capped full jitter', () => {
   assert.equal(backoffDelay(0, 7), 7000)
-  assert.equal(backoffDelay(0, 90), 90000)
+  assert.equal(backoffDelay(0, 90), 30000)
   assert.equal(backoffDelay(0, null, () => 0.5), 500)
   assert.equal(backoffDelay(2, null, () => 0.5), 2000)
   assert.equal(backoffDelay(10, null, () => 0.999), 29970)

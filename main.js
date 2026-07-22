@@ -203,6 +203,22 @@ function directionFor(node) {
   return lastDirectionByNode.get(node.paperId) || 'citations'
 }
 
+// The direction "load more" should act on: the most recently expanded one if
+// it still has undisplayed papers, otherwise the other one. Null when neither
+// direction has anything left to show.
+function directionWithRemainder(node) {
+  const preferred = directionFor(node)
+  const other = preferred === 'citations' ? 'references' : 'citations'
+  for (const direction of [preferred, other]) {
+    const expansion = node.expansion[direction]
+    if (
+      expansion.pagesFetched > 0
+      && (expansion.pool.length > 0 || !expansion.exhausted)
+    ) return direction
+  }
+  return null
+}
+
 function refreshSelectedInspector(node) {
   if (state.selected === node.paperId && !elements.inspector.hidden) {
     showInspector(node)
@@ -411,7 +427,8 @@ function wireInspector() {
   elements.inspector.querySelector('[data-testid="load-more"]')
     .addEventListener('click', () => {
       const node = state.nodes.get(state.selected)
-      if (node) expand(node, directionFor(node))
+      const direction = node && directionWithRemainder(node)
+      if (direction) expand(node, direction)
     })
 }
 
@@ -547,11 +564,8 @@ function showInspector(node) {
     }
   }
 
-  const direction = directionFor(node)
-  const expansion = node.expansion[direction]
   field('load-more').hidden = !(
-    expansion.pagesFetched > 0
-    && (expansion.pool.length > 0 || !expansion.exhausted)
+    directionWithRemainder(node)
     && state.nodes.size < configuredNodeCap()
   )
 

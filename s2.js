@@ -56,7 +56,9 @@ export function backoffDelay(attempt, retryAfterSeconds, rand = Math.random) {
     && Number.isFinite(retryAfter)
     && retryAfter >= 0
   ) {
-    return retryAfter * 1000
+    // Honor the server's Retry-After, but never let one header freeze the
+    // whole request queue longer than the retry policy's ceiling.
+    return Math.min(retryAfter * 1000, MAX_DELAY_MS)
   }
 
   const safeAttempt = Math.max(0, Number.isFinite(attempt) ? attempt : 0)

@@ -48,13 +48,14 @@ step, ES modules, D3 v7, live keyless API). Visually it must read as a
 These are two readings of the same edge and the UI states the convention
 explicitly (in the empty state and the About text):
 
-> **Edges encode citation, from the newer paper to the older paper it cites.
-> Read the graph left-to-right as intellectual influence.**
+> **Edges encode citation, from the citing paper to the cited paper —
+> usually, but not always, newer to older. Read the graph left-to-right as
+> intellectual influence.**
 
 Position alone cannot encode direction for same-year citations, bad metadata,
 or undated papers, so on **hover and selection** each edge gains a subtle
-directional cue — a small monochrome half-arrow tick at the cited (older)
-end. Default resting edges remain arrowless hairlines.
+directional cue — a small monochrome half-arrow **cited-end tick**. Default
+resting edges remain arrowless hairlines.
 
 ## Visual design
 
@@ -106,7 +107,9 @@ tool chrome. Not flashy, not over-stylized.
 
 - Search field, results list, nodes, inspector controls all keyboard
   reachable: results navigable by arrow keys; canvas nodes focusable (roving
-  tabindex, arrow keys move between adjacent nodes, Enter selects/expands).
+  tabindex; an arrow key moves focus to the **spatially nearest node in the
+  pressed direction**, independent of edge structure; Enter
+  selects/expands).
 - Visible focus indicator on nodes (ring) and all controls.
 - `prefers-reduced-motion`: domain rescaling and node entry reposition
   instantly, no animated transitions.
@@ -133,10 +136,12 @@ index.html      # site root
 ### graph.js layout model
 
 - x = linear year scale, domain auto-fit to loaded papers. When expansion
-  widens the domain, the rescale **preserves the selected node's screen
-  x-position** (translate compensation) so the user keeps their place; a
-  brief status-line note marks that the timeline widened. Under
-  reduced-motion the rescale is instant.
+  widens the domain, the rescale **minimizes displacement of the selected
+  node while keeping the complete dated domain visible**, preserving its
+  exact screen x-position when both constraints permit (e.g. a selected node
+  at the left edge whose references introduce much earlier years must move
+  right to keep them onscreen). A brief status-line note marks that the
+  timeline widened. Under reduced-motion the rescale is instant.
 - Forces manage **y only**: collision + weak y-centering; x is pinned via
   `fx` from the year scale so year positions never drift.
 - Undated papers: hollow dots in a visually demarcated "undated" gutter at
@@ -169,7 +174,8 @@ index.html      # site root
   ```
 
 - Edges: `{ citing: paperId, cited: paperId }` — key order encodes citation
-  direction (newer → older). Deduplicated on insert.
+  direction (citing → cited; usually, not always, newer → older).
+  Deduplicated on insert.
 
 ### Concurrency rules
 
@@ -196,11 +202,17 @@ count** — totals come from the parent paper's `citationCount` /
 3. **Load more:** reveals the next 25 from the already-fetched pool
    (instant, no request). Only when the pool is exhausted and `next` exists
    does it fetch the next 500-item pool page.
-4. **Truthful disclosure** in the status line and inspector:
-   - total ≤ 500 (pool covers everything): "top 25 of 1,203" style claims
-     are globally true → "showing top 25 of 443 citations".
-   - total > 500: rank claim is scoped to the pool → "showing top 25 of the
-     first 500 fetched (8,412 total)".
+4. **Truthful disclosure** in the status line and inspector. The response's
+   `next` field is the completeness authority (the pool covers all
+   retrievable results iff `next` is absent); the parent's
+   `citationCount`/`referenceCount` is disclosure metadata that may differ
+   from what the endpoint actually returns:
+   - `next == null` and fetched count equals reported total → global rank
+     claim: "showing top 25 of 443 citations".
+   - `next == null` but counts differ → "showing 25 of 431 available papers
+     (443 citations reported)".
+   - `next != null` → pool-scoped claim: "showing top 25 of the first 500
+     fetched (8,412 total)".
 5. **Rate limiting:** all requests pass through a 1 req/sec queue (keyless
    shared-pool etiquette) with an in-flight indicator in the status line.
 6. **Caching:** responses cached in memory and localStorage under a

@@ -1,277 +1,419 @@
 # Lineage — Citation Explorer: Design
 
-**Date:** 2026-07-21 (rev 2, post spec review)
-**Status:** Approved concept; rev 2 resolves review findings
-**Role:** New flagship project for pvjohnston.com, succeeding noprofits.org in the flagship card slot.
+**Date:** 2026-07-22 (rev 4, Crossref + OpenCitations provider pivot)
+**Status:** Approved for implementation
+**Role:** Flagship project for pvjohnston.com, succeeding noprofits.org in the flagship card slot.
 
 ## Summary
 
 Lineage is a static, single-page interactive citation-graph explorer served at
-**lineage.pvjohnston.com**. A visitor searches for any paper via the Semantic
-Scholar Academic Graph API, the paper becomes a seed node, and clicking nodes
-expands their references (what they cite) and citations (who cites them). The
-distinctive feature is the **time-axis layout**: every paper's x-position is
-pinned to its publication year, so citation lineage reads left-to-right as a
-genealogy of ideas rather than a force-directed hairball.
+**lineage.pvjohnston.com**. A visitor searches for a paper through Crossref,
+selects a result as the seed, and expands its references (what it cites) and
+citations (what cites it) through OpenCitations Index v2. Crossref supplies
+direct metadata for DOI-bearing papers; OpenCitations Meta supplies limited
+fallback metadata for DOI-less OMID papers.
 
-Architecturally it is a sibling of grants.noprofits.org (single page, no build
-step, ES modules, D3 v7, live keyless API). Visually it must read as a
-**completely different implementation** from Grant Flows.
+The distinctive feature is the **time-axis layout**: every dated paper's
+x-position is pinned to its publication year, so citation lineage reads
+left-to-right as a genealogy of ideas rather than a force-directed hairball.
+
+Architecturally it is a sibling of grants.noprofits.org: one static page, no
+build step, browser-native ES modules, D3 v7, and keyless public APIs. It must
+remain zero-cost and must not require a proxy or expose a credential.
 
 ## Goals
 
-- One project that credibly serves three purposes: research-adjacent substance,
-  engineering portfolio signal, and broad approachability.
-- Static hosting, zero running cost, no API keys, no proxy, nothing to leak.
-- Sustainable: new papers and lineages are endless content; ties into the
-  pvjohnston.com notebook (e.g. tracing the ancestry of Hartree–Fock).
+- Combine research-adjacent substance, engineering portfolio signal, and broad
+  approachability in one project.
+- Remain static-hostable, keyless, proxy-free, and free of server state.
+- Represent provider coverage and ranking honestly; never imply that an open
+  citation index is exhaustive or that a sampled batch is globally top-ranked.
+- Make large citation neighborhoods useful without allowing an unbounded API
+  response to overwhelm the browser.
 
 ## Non-goals
 
-- No OpenAlex/funder/institution enrichment at launch (noted as future work).
-- No accounts, no server state, no saved graphs (localStorage cache only).
-- Desktop is primary; responsive behavior is specified below but mobile is not
-  optimized beyond it.
-- Not a replica of Connected Papers/Litmaps similarity maps — this is a strict
-  citation-edge explorer with a temporal reading.
+- No global “top cited” ordering. That would require hydrating or precomputing
+  a count for every neighbor and therefore a backend or another data product.
+- No OpenAlex/funder/institution enrichment at launch.
+- No accounts, server state, or saved graphs. Local storage is only a bounded
+  response-metadata cache.
+- No similarity graph. Every displayed edge must be an actual citation edge
+  returned by OpenCitations.
+- Desktop is primary. The responsive behavior below is binding, but mobile is
+  not optimized beyond it.
 
 ## Identity
 
 - **Name:** Lineage. Wordmark set in Bricolage Grotesque.
-- **Domain:** lineage.pvjohnston.com (CNAME → GitHub Pages; new repo, sibling
-  of `grants`).
-- **Follow-up (separate PR in pvjohnston.com repo, not part of the app):**
-  replace the noprofits.org flagship card on the index with Lineage.
+- **Domain:** lineage.pvjohnston.com (CNAME → GitHub Pages).
+- **Follow-up:** replace the noprofits.org flagship card in the pvjohnston.com
+  repository in a separate change.
 
 ## Semantic convention: citation vs. influence
 
-These are two readings of the same edge and the UI states the convention
-explicitly (in the empty state and the About text):
+The empty state and About text use this exact convention:
 
 > **Edges encode citation, from the citing paper to the cited paper —
 > usually, but not always, newer to older. Read the graph left-to-right as
 > intellectual influence.**
 
-Position alone cannot encode direction for same-year citations, bad metadata,
-or undated papers, so on **hover and selection** each edge gains a subtle
-directional cue — a small monochrome half-arrow **cited-end tick**. Default
-resting edges remain arrowless hairlines.
+Position cannot encode direction for same-year citations, future-dated or bad
+metadata, or undated papers. On hover and selection, each incident edge gains
+a small monochrome half-arrow **cited-end tick**. Resting edges remain
+arrowless hairlines.
 
 ## Visual design
 
 Ink on paper; deliberately the inversion of Grant Flows' cream/sky/rounded
-tool chrome. Not flashy, not over-stylized.
+tool chrome.
 
-- **Surface:** plain white background, near-black ink. No cream, no canvas
-  tint, no shadows, no gradients, no pills. Square corners, 1 px borders.
-- **Nodes:** small filled dots, 3–6 px radius, scaled gently by citation
-  count. Undated papers render as hollow dots. Each dot sits inside an
-  **invisible ~24 px hit area** that is the actual pointer/keyboard target.
-- **Edges:** hairline (~0.75 px) grey-black lines; arrowless at rest, with
-  the hover/selection directional tick described above.
-- **Single accent color:** pvjohnston.com indigo `#465C9B`, used ONLY for the
-  selected node, its direct edges, and hyperlinks. Selection is additionally
-  indicated by a ring outline and pinned label, so it never depends on color
-  alone. Everything else is monochrome.
-- **Type (the "hint back" to pvjohnston.com):** Hanken Grotesk (UI),
-  JetBrains Mono (years, counts, metadata, axis ticks), Bricolage Grotesque
-  (wordmark only).
-- **Year axis:** thin ruled line along the bottom with mono tick labels,
-  styled like a figure axis from the pvjohnston.com blog ("Fig. 1" register).
-  D3's tick heuristics thin the labels naturally on resize.
-- **Labels:** first author + year, shown on hover; pinned for selected and
-  expanded nodes. Label halo per the grants technique (paint-order: stroke)
-  in the background color so labels stay crisp crossing edges.
+- **Surface:** white, near-black ink, square corners, and 1 px rules. No cream,
+  shadows, gradients, pills, or rounded controls.
+- **Nodes:** filled dots with a 3–6 px radius. Radius is gently scaled by the
+  nullable Crossref `is-referenced-by-count` proxy. A missing proxy uses the
+  minimum radius and is not represented as zero. Undated papers are hollow.
+  Each dot has an invisible approximately 24 px pointer/keyboard hit area.
+- **Edges:** approximately 0.75 px grey-black lines, with the selected/hovered
+  cited-end tick described above.
+- **Accent:** pvjohnston.com indigo `#465C9B`, used only for the selected node,
+  its direct edges, and hyperlinks. A ring and pinned label make selection
+  non-color-dependent.
+- **Type:** Hanken Grotesk for UI, JetBrains Mono/system monospace for years and
+  counts, and Bricolage Grotesque for the wordmark only.
+- **Axis:** a ruled bottom year axis with mono tick labels and D3 tick thinning.
+- **Labels:** first author + year on hover, pinned for selected and expanded
+  nodes, with a background-color paint-order halo.
 
-## Layout & responsive behavior
+## Layout and responsive behavior
 
-- Slim header: wordmark + single search field. No masthead chrome.
-- Full-bleed graph canvas below the header.
-- **Inspector:** at ≥720 px viewport width, a right-hand column (plain,
-  separated by a 1 px rule) that shrinks the canvas rather than covering it.
-  Below 720 px it becomes a bottom sheet overlaying the lower canvas, with a
-  visible close button. Opens on node selection: title, authors, year, venue,
-  abstract, citation count, DOI and Semantic Scholar links, expand actions
-  ("show references", "show citations", "load more"), and a **textual
-  relationships list** (which loaded papers this one cites / is cited by) as
-  the non-visual equivalent of the edges.
-- One-line status footer: request state, truncation notices, errors, and the
+- Slim header with wordmark and one search field; full-bleed graph below.
+- **Inspector:** at viewport widths ≥720 px, a right column separated by a 1 px
+  rule that shrinks the canvas. Below 720 px, a bottom sheet overlays the lower
+  canvas and has a visible close button.
+- The inspector shows available title, authors, year, venue, abstract, DOI,
+  source links, expansion actions, source-labelled counts, and a **textual
+  relationships list** describing loaded outgoing and incoming edges.
+- Crossref's citation proxy and OpenCitations known-link totals are displayed as
+  separate facts. Missing values are omitted or labelled unavailable, never
+  coerced to zero.
+- One-line status footer: request state, representative-sample disclosure,
+  large-expansion confirmation, safety stops, node-cap notices, errors, and a
   manual Retry action after retry exhaustion.
-- **Empty state:** the canvas is never blank at first load — one sentence of
-  instruction ("Search for a paper, then click nodes to trace what it cites
-  and who cites it") plus 2–3 plain-text example queries (e.g. "Attention Is
-  All You Need", "Hartree 1928", "CRISPR-Cas9"). These are static strings,
-  not the curated-trailheads feature deferred to future work.
+- **Empty state:** one instruction sentence (“Search for a paper, then click
+  nodes to trace what it cites and who cites it”) and 2–3 static examples such
+  as “Attention Is All You Need,” “Hartree 1928,” and “CRISPR-Cas9.”
 
 ## Accessibility contract (minimal, binding)
 
-- Search field, results list, nodes, inspector controls all keyboard
-  reachable: results navigable by arrow keys; canvas nodes focusable (roving
-  tabindex; an arrow key moves focus to the **spatially nearest node in the
-  pressed direction**, independent of edge structure; Enter
-  selects/expands).
-- Visible focus indicator on nodes (ring) and all controls.
-- `prefers-reduced-motion`: domain rescaling and node entry reposition
-  instantly, no animated transitions.
-- Selection and expansion state never conveyed by color alone (ring + pinned
-  label + inspector).
-- The inspector's textual relationships list is the primary screen-reader
-  path to edge information. Canvas nodes carry concise `aria-label`s
-  (first author, year, title) so keyboard focus is announced; decorative
-  edges and axis marks are hidden from the accessibility tree.
+- Search, result list, canvas nodes, inspector controls, confirmation, Retry,
+  and reset are keyboard reachable.
+- Results use arrow-key navigation. Canvas nodes use roving tabindex; an arrow
+  key moves focus to the spatially nearest node in that direction independent
+  of edge structure. Enter/Space selects a node.
+- Nodes and controls have a visible focus indicator.
+- `prefers-reduced-motion` makes domain rescaling and node repositioning
+  immediate.
+- Selection, loading, confirmation, and expansion state never depend on color.
+- The textual relationship list is the primary screen-reader path for edges.
+  Nodes have concise labels containing first author, year, and title;
+  decorative edges and axis marks are hidden from the accessibility tree.
+- The “activate again” large-expansion confirmation must also be announced in the
+  status region and reflected in the expand control's accessible description.
 
 ## Architecture
 
-Single page, no build step, ES modules loaded directly by `index.html`.
-D3 v7 from CDN. Repo layout:
+Single page, no build step, ES modules loaded directly by `index.html`; D3 v7
+is pinned and loaded from the CDN with SRI.
 
+```text
+index.html      # site root and semantic shell
+├── main.js     # controller, graph model, expansion state, disclosures
+├── data.js     # Crossref + OpenCitations clients, queues, retry, cache
+├── graph.js    # fixed-x year renderer and force-managed y layout
+└── lineage.css # self-contained visual theme and responsive inspector
 ```
-index.html      # site root
-├── main.js     # controller: search, selection, expand, graph state
-├── s2.js       # Semantic Scholar API client + request queue + retry + cache
-├── graph.js    # D3 renderer: fixed-x year scale, force-managed y
-└── lineage.css # entire theme (self-contained; no shared noprofits theme)
+
+`data.js` replaces the Semantic Scholar-specific `s2.js`. Provider details
+must not leak into graph identity or edge semantics.
+
+### Provider responsibilities
+
+| Responsibility | Source | Contract |
+|---|---|---|
+| Search | Crossref REST `/works` list/search | Keyless; minimal `select` fields; normalized results; 1 request/second |
+| Seed/direct metadata | Crossref REST `/works/{doi}` | One DOI per request; 5 requests/second, concurrency 1 |
+| Edge preflight totals | OpenCitations Index v2 count endpoints | Required before an edge-list request |
+| Citation/reference edges | OpenCitations Index v2 `citations` / `references` | Complete known-open-link response for one identifier/direction |
+| DOI candidate hydration | Crossref REST `/works/{doi}` | Singleton requests only; progressive status |
+| DOI-less fallback hydration | OpenCitations Meta `/metadata/{ids}` | OMID only, batches of at most 10, split again to keep the encoded URL safe |
+
+OpenCitations Index and Meta share one client-side scheduler capped at **180
+requests/minute/IP**. Crossref uses one scheduler with concurrency 1 and
+endpoint-aware pacing: **1 request/second for list/search** and **5
+requests/second for singleton works**. A search request and singleton request
+may not run concurrently.
+
+### Paper identity and normalized metadata
+
+Every graph node has a provider-neutral `paperId`. Normalize every available
+identifier and choose the first available canonical form in this priority:
+
+1. normalized DOI: `doi:10.…` (lowercase; URL and `doi:` prefixes removed),
+2. OpenCitations Meta identifier: `omid:…`,
+3. PubMed identifier: `pmid:…`.
+
+Keep every other normalized identifier in `aliases`, and maintain an alias map
+so the same work cannot enter the graph twice under different identifiers.
+Hydration occurs before admission, so newly discovered DOI aliases participate
+in canonicalization. If a later record reveals that two existing IDs are the
+same work, merge nodes and deduplicate/rewire their edges without losing the
+selected node. Never expose a Crossref- or OpenCitations-specific database key
+as graph identity unless it is one of the normalized aliases above.
+
+```js
+{
+  paperId,                       // doi:… then omid:… then pmid:…
+  aliases: string[],
+  doi: string | null,
+  omid: string | null,
+  pmid: string | null,
+  title: string | null,
+  authors: string[],
+  year: number | null,
+  yearSource: 'metadata' | 'edge' | 'derived' | null,
+  venue: string | null,
+  abstract: string | null,
+  crossrefCitedByCount: number | null,
+  openCitationCount: number | null,
+  openReferenceCount: number | null,
+  expansion: {
+    references: ExpansionState,
+    citations: ExpansionState,
+  },
+}
 ```
 
-### graph.js layout model
+`crossrefCitedByCount` is a node-size/inspector proxy from Crossref.
+`openCitationCount` and `openReferenceCount` are OpenCitations known-link
+totals. They are not interchangeable, and no count defaults to zero merely
+because it is missing.
 
-- x = linear year scale, domain auto-fit to loaded papers. When expansion
-  widens the domain, the rescale **minimizes displacement of the selected
-  node while keeping the complete dated domain visible**, preserving its
-  exact screen x-position when both constraints permit (e.g. a selected node
-  at the left edge whose references introduce much earlier years must move
-  right to keep them onscreen). A brief status-line note marks that the
-  timeline widened. Under reduced-motion the rescale is instant.
-- Forces manage **y only**: collision + weak y-centering; x is pinned via
-  `fx` from the year scale so year positions never drift.
-- Undated papers: hollow dots in a visually demarcated "undated" gutter at
-  the right edge. Never guess a year. Edges touching the gutter rely on the
-  hover directional tick for direction.
-- **Node cap 300, partial admission:** if an expansion would exceed the cap,
-  admit candidates in rank order until the cap is reached, then stop and
-  disclose in the status line ("node cap reached — added 12 of 25"). No
-  eviction in v1; the reset action clears the graph.
+Edges remain `{ citing: paperId, cited: paperId }`, are deduplicated on insert,
+and always encode citing → cited.
 
-### s2.js data model
+### Expansion state
 
-- Nodes keyed by Semantic Scholar `paperId`:
+Each node has independent state for references and citations:
 
-  ```
-  { paperId, title, year, authors, venue, abstract?, citationCount,
-    referenceCount, externalIds (DOI),
-    expansion: { refs: ExpansionState, cites: ExpansionState } }
-  ```
+```js
+{
+  status: 'idle' | 'preflighting' | 'confirm' | 'blocked' |
+          'fetching' | 'hydrating' | 'error',
+  preflightCount: number | null,
+  confirmation: { generation: number, count: number } | null,
+  candidates: EdgeCandidate[],       // compact, normalized, memory-only
+  cursor: number,                    // next candidate in stratified order
+  displayedCount: number,
+  candidateCount: number | null,     // deduplicated returned links
+  exhausted: boolean,
+}
+```
 
-- `ExpansionState` (per direction):
+The raw OpenCitations edge response is normalized immediately into compact
+candidate descriptors and discarded. Neither raw edge arrays nor normalized
+candidate arrays are persisted in localStorage. Reset releases them.
 
-  ```
-  { status: 'idle' | 'loading' | 'error',
-    nextOffset,        // API offset for the next pool page, null if none
-    fetchedCount,      // items downloaded into the local pool
-    displayedCount,    // items admitted to the graph
-    total,             // from the paper's citationCount / referenceCount
-    exhausted }        // no further items server-side
-  ```
+## Time data contract
 
-- Edges: `{ citing: paperId, cited: paperId }` — key order encodes citation
-  direction (citing → cited; usually, not always, newer → older).
-  Deduplicated on insert.
+OpenCitations `creation` is the citing work's publication date in either
+direction.
 
-### Concurrency rules
+- For an incoming citation, the neighboring work is the citing work, so
+  `creation` directly supplies its provisional date/year.
+- For an outgoing reference, the neighboring work is the cited work.
+  `creation` therefore describes the current/citing node, not the neighbor.
+  Derive a provisional cited date from `creation - timespan` only when both
+  values have enough calendar precision to determine an unambiguous year.
+  Ambiguous year-only/month-only arithmetic, malformed or negative durations,
+  and unsupported duration components produce no derived year.
+- Crossref or OpenCitations Meta hydration confirms or replaces any provisional
+  date. Metadata wins. A failed hydration may leave a defensible provisional
+  year; otherwise the node goes to the undated gutter.
+- Same-year and future-dated edges retain the supplied dates. Direction is
+  never inferred from x-position.
 
-- An expansion click while that direction's `status === 'loading'` is
-  ignored (no queue duplication).
-- Graph reset increments a generation counter; responses arriving for a
-  stale generation are discarded, and pending queued requests for the old
-  generation are dropped from the queue.
+## Deterministic representative ordering
 
-## Data flow & the ranking/pagination contract
+OpenCitations edge rows do not contain a globally comparable citation count for
+each neighbor. Lineage therefore does not claim global “top” results.
 
-API facts verified against the live service (2026-07-21): the
-`/paper/{id}/citations` and `/references` endpoints accept `limit` up to
-1000 with `{offset, data, next?}` responses; a `sort` parameter is
-**silently ignored** (no server-side ranking); responses carry **no total
-count** — totals come from the parent paper's `citationCount` /
-`referenceCount`.
+After edge normalization and deduplication, but **before metadata hydration**,
+the controller computes one deterministic candidate order:
 
-1. **Search:** `GET /graph/v1/paper/search?query=…` → result list → user
-   picks the seed paper.
-2. **Expand (bounded candidate pool):** one request per direction with
-   `limit=500` fetches the pool; the client ranks the pool locally by
-   `citationCount` descending and admits the **top 25** to the graph.
-3. **Load more:** reveals the next 25 from the already-fetched pool
-   (instant, no request). Only when the pool is exhausted and `next` exists
-   does it fetch the next 500-item pool page.
-4. **Truthful disclosure** in the status line and inspector. The response's
-   `next` field is the completeness authority (the pool covers all
-   retrievable results iff `next` is absent); the parent's
-   `citationCount`/`referenceCount` is disclosure metadata that may differ
-   from what the endpoint actually returns:
-   - `next == null` and fetched count equals reported total → global rank
-     claim: "showing top 25 of 443 citations".
-   - `next == null` but counts differ → "showing 25 of 431 available papers
-     (443 citations reported)".
-   - `next != null` → pool-scoped claim: "showing top 25 of the first 500
-     fetched (8,412 total)".
-5. **Rate limiting:** all requests pass through a 1 req/sec queue (keyless
-   shared-pool etiquette) with an in-flight indicator in the status line.
-6. **Caching:** responses cached in memory and localStorage under a
-   schema-version key with a size cap and LRU eviction. localStorage quota
-   errors or corrupt entries degrade silently to memory-only caching (a
-   status-line note, never a failure).
+1. Split dated and undated candidates; sort dated candidates by provisional
+   year then `paperId`, and undated candidates by `paperId`.
+2. Build each batch of at most **25** from the remaining candidates. While both
+   sets remain, reserve one slot for the next undated candidate and take the
+   remaining slots at evenly spaced quantiles across the dated candidates.
+   When only one set remains, fill from that set using the same stable ordering
+   or dated quantiles.
+3. Remove selected candidates and repeat until the complete order is built.
 
-Fields requested: `title,year,authors,venue,citationCount,referenceCount,
-externalIds` (+ `abstract` on single-paper fetch for the inspector).
+This makes every batch reproducible, spreads dated work across the visible time
+range, and prevents metadata availability or response timing from biasing
+selection. Hydration may correct a node's year after selection but does not
+reorder an already computed expansion.
 
-## Retry policy
+## Expansion flow and browser safety
 
-- **Retryable:** 429, transient 5xx, and network errors.
-  - Honor `Retry-After` when present; otherwise exponential backoff with
-    full jitter, base 1 s, max delay 30 s, **max 4 attempts**.
-  - The queue pauses while backing off rather than dropping requests.
-- **Not retryable:** 400/404 and other 4xx — surface immediately in the
-  status line ("paper not found").
-- After retry exhaustion: status-line error + **manual Retry action**; the
-  affected direction's `ExpansionState.status = 'error'`.
-- The 1 req/sec pace is courtesy, not a guarantee — the shared public pool
-  throttles readily (observed live during verification), so the backoff
-  path is a first-class flow, not an edge case.
+For one node and one direction:
 
-## Errors & edge cases
+1. **Preflight:** request the OpenCitations Index v2 count. Preflight is
+   required; a failed preflight follows the retry policy and does not fetch the
+   edge array.
+2. **Safety decision:**
+   - `0` → disclose the dead end; do not request edges.
+   - `1–5,000` → continue on the first click.
+   - `5,001–25,000` → set `status = 'confirm'` and disclose, for example,
+     “11,144 known open citations — activate show citations again to load.” Only a
+     second activation of that same node/direction in the same graph generation
+     proceeds. Selecting another node, reset, or a changed total clears it.
+   - `>25,000` → hard browser safety stop. Do not request the edge array, and
+     explain that the neighborhood exceeds Lineage's browser-only limit.
+3. **Fetch edges:** issue exactly one Index v2 request for that direction,
+   normalize aliases/dates, deduplicate candidates, compute the deterministic
+   order, and discard the raw response. The deduplicated returned candidate
+   count becomes the truthful expansion total even if it differs from the
+   preflight count.
+4. **Hydrate batch:** take the next 25 candidates. DOI-bearing candidates use
+   Crossref singleton metadata. Only DOI-less candidates with an OMID use
+   OpenCitations Meta, in batches of at most 10 and additionally split before
+   the encoded request URL approaches the implementation's tested safe limit.
+   PMID-only candidates remain minimal identifier/date nodes if no permitted
+   hydration path exists.
+5. **Admit:** merge aliases, add nodes and citation edges in candidate order,
+   and stop at the existing 300-node cap. Individual missing metadata does not
+   erase a known edge; admit a minimal labelled node and disclose incomplete
+   metadata after retry exhaustion. A transient per-paper hydration failure
+   admits the placeholder immediately and exposes a focused manual metadata
+   Retry without refetching the edge array.
+6. **Load more:** hydrate and admit the next local candidate batch. It never
+   refetches the direction's edge array. It may make metadata requests for the
+   new batch.
 
-- Empty search results and zero-citation dead ends: plain-language messages.
-- Truncation and node-cap admission are always disclosed in the status
-  line — never silently capped.
-- Missing abstracts/venues: inspector omits the row rather than showing
-  placeholders.
-- Same-year and future-dated papers: positioned by their stated year;
-  direction remains readable via the hover tick (never inferred from
-  position).
+Truthful disclosure examples:
+
+- Complete small set: “showing 7 of 7 known open references.”
+- Partial representative set: “showing 25 representative citations from
+  11,144 known open citation links.”
+- Later batch: “showing 50 representative citations from 11,144 known open
+  citation links.”
+- Node cap suffix: “node cap reached — added 12 of 25.”
+
+Never use “top,” conflate the Crossref proxy with OpenCitations totals, or imply
+that “known open” means all citations in existence.
+
+## Graph layout model
+
+- x is a linear year scale auto-fit to loaded papers. When expansion widens the
+  domain, rescaling minimizes displacement of the selected node while keeping
+  the full dated domain visible. Preserve its exact screen x-position when the
+  constraints permit; otherwise move only as far as needed. Announce “timeline
+  widened.” Reduced motion makes the rescale immediate.
+- Forces manage y only: collision plus weak centering; x remains pinned via
+  `fx`.
+- Undated papers are hollow dots in a demarcated right gutter. Never guess a
+  year.
+- **Node cap 300, partial admission:** admit in deterministic candidate order
+  until the cap is reached, disclose the partial batch, and do not evict nodes.
+  Reset clears the graph.
+
+## Concurrency, retries, and cache
+
+- A click while that direction is preflighting, fetching, or hydrating is
+  ignored. A click in `confirm` is the explicit second-click confirmation.
+- Reset increments a generation counter. Every queued, in-flight, hydration,
+  and retry continuation checks it; stale work is dropped and cannot mutate UI
+  or cache-derived graph state.
+- An identity merge cancels work tokens on both pre-merge node objects,
+  preserves only settled expansion progress on the canonical survivor, and
+  requires an explicit activation to resume canceled work.
+- Each scheduler pauses its own queue during backoff; one provider's backoff
+  does not freeze the other provider.
+- Retry only network errors, 429, and transient 5xx. Honor `Retry-After` when
+  accessible; otherwise use full-jitter exponential backoff with base 1 second,
+  cap 30 seconds, and at most 4 attempts.
+- Other 4xx responses fail immediately with provider-appropriate copy. After
+  exhaustion, expose manual Retry for the failed operation.
+- OpenCitations Meta may recursively isolate a multi-identifier batch only
+  after an exhausted HTTP 500 batch-shape failure. Never split 502, 503, or 504
+  outages: doing so would amplify one provider outage into many requests.
+- Metadata repair has a stable per-paper/direction retry backlog. Loading a
+  later display batch neither clears nor replaces unresolved earlier repairs.
+- Cache successful Crossref metadata, OpenCitations Meta metadata, and small
+  count responses in memory and localStorage under a new schema-version prefix
+  with a 2,000,000-byte LRU cap. Corruption/quota errors degrade to memory-only
+  with a status note. Never persist edge or candidate arrays.
+- Request status is aggregated across schedulers so an idle event from one
+  provider cannot hide another provider's loading/backoff state.
+
+## Errors and edge cases
+
+- Empty search and zero-link expansions use plain-language messages.
+- A result without an OpenCitations-supported DOI/OMID/PMID can be inspected
+  but its expansion controls are disabled with an explanation.
+- Missing title/authors/venue/abstract/counts are nullable. Omit unavailable
+  inspector rows; use a safe identifier-derived label for a minimal node.
+- Crossref abstracts may contain JATS/XML. Convert them to text; never inject
+  provider markup into the page.
+- Malformed identifiers, duplicate aliases, self-citations, duplicate edge
+  rows, count/edge mismatches, same-year, future-dated, and undated records have
+  explicit unit coverage.
+- Coverage copy says “known open citation links,” not “all citations.”
 
 ## Testing
 
-- **Playwright e2e** (as in grants): local static server + stubbed API
-  fixtures. Flows:
-  - search → seed → expand references → expand citations → inspector
-    content → truncation disclosure
-  - "load more" from pool (no network) and across a pool boundary (network)
-  - duplicate expansion clicks (ignored) and reset-then-response
-    (stale-generation discard)
-  - node-cap boundary: partial admission + disclosure
-  - 404 vs 429/5xx handling; `Retry-After`; retry exhaustion → manual
-    Retry; offline → recovery
-  - keyboard-only: search, result selection, node navigation, expansion
-  - reduced-motion rescale; inspector at <720 px (bottom sheet)
-- **Unit tests** (node test runner, mocked fetch): `s2.js` response mapping,
-  pool ranking + disclosure strings, `ExpansionState` transitions, queue
-  pacing/backoff/jitter/`Retry-After`, year-scale domain logic incl.
-  same-year/future-dated/undated cases, edge deduplication, localStorage
-  quota/corruption fallback.
+### Unit tests
 
-## Future work (explicitly out of scope for v1)
+- Crossref search/direct-record mapping, nullable fields, JATS-to-text, and DOI
+  normalization.
+- OpenCitations count, citation/reference edge, identifier-alias, creation, and
+  timespan mapping.
+- DOI/OMID/PMID canonical priority, alias merge, edge rewiring, and dedupe.
+- Exact deterministic time-stratified ordering, including fewer than 25,
+  multiple batches, tied years, undated-only, and mixed dated/undated pools.
+- `ExpansionState` transitions: preflight, confirm, blocked safety stop, fetch,
+  hydrate, load more, exhaustion, error, and reset.
+- Thresholds at 5,000/5,001 and 25,000/25,001; second-click generation binding.
+- Separate pacing/concurrency, backoff/jitter/`Retry-After`, queue independence,
+  and aggregate status.
+- Cache versioning, LRU, corruption/quota fallback, and proof that edge arrays
+  are never persisted.
+- Existing year-domain, same/future/undated edge, node-cap, and dedupe coverage.
 
-- OpenAlex enrichment (funders, institutions, topics) via the existing CORS
-  proxy with a free key.
-- Curated trailhead seeds on the landing page.
-- Shareable graph-state URLs.
-- Node eviction / graph pruning beyond the hard cap.
+### Playwright end-to-end tests
+
+- Crossref search → seed → Index preflight → citations/references → Crossref or
+  Meta hydration → graph/inspector/relationships.
+- Representative disclosure and load-more metadata calls without another edge
+  request.
+- 5,001-link confirmation, cancellation/reset, and >25,000 hard stop.
+- Duplicate clicks, stale response after reset, partial hydration failure, and
+  manual recovery.
+- Provider-specific 404/429/5xx/network behavior and independent queues.
+- Node-cap partial admission, metadata gaps, count mismatch, same/future/
+  undated edges, and alias collision.
+- Existing keyboard-only, roving-tabindex, visible-focus, reduced-motion, and
+  narrow-inspector coverage.
+
+All browser tests stub Crossref, OpenCitations Index v2, OpenCitations Meta, and
+the D3 CDN; CI never depends on the live services.
+
+## Future work
+
+- A backend/precomputed ranking index if true global “top cited” ordering ever
+  becomes a product requirement.
+- OpenAlex enrichment for funders, institutions, and topics.
+- Curated trailhead seeds, shareable graph-state URLs, and graph pruning beyond
+  the hard cap.

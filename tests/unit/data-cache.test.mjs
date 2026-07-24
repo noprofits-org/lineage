@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createCache } from '../../s2.js'
+import { createCache } from '../../data.js'
 
 function fakeStorage() {
   const values = new Map()
@@ -12,6 +12,9 @@ function fakeStorage() {
   }
 }
 
+const entryKey = (disk, suffix) => [...disk._map.keys()].find(key => key.endsWith(`.${suffix}`))
+const indexKey = disk => [...disk._map.keys()].find(key => key.endsWith('.__index'))
+
 test('set/get round-trips via memory and disk', () => {
   const disk = fakeStorage()
   const cache = createCache(disk)
@@ -22,9 +25,18 @@ test('set/get round-trips via memory and disk', () => {
   assert.deepEqual(freshCache.get('u1'), { a: 1 })
 })
 
+test('legacy Semantic Scholar cache entries are ignored', () => {
+  const disk = fakeStorage()
+  disk.setItem('lineage.v1.same-url', JSON.stringify({ legacy: true }))
+  const cache = createCache(disk)
+  assert.equal(cache.get('same-url'), undefined)
+})
+
 test('a corrupt disk entry becomes a miss and disables disk caching', () => {
   const disk = fakeStorage()
-  disk.setItem('lineage.v1.bad', '{not json')
+  const first = createCache(disk)
+  first.set('bad', { valid: true })
+  disk.setItem(entryKey(disk, 'bad'), '{not json')
   const cache = createCache(disk)
 
   assert.equal(cache.get('bad'), undefined)
@@ -33,7 +45,9 @@ test('a corrupt disk entry becomes a miss and disables disk caching', () => {
 
 test('a corrupt LRU index degrades to memory-only caching', () => {
   const disk = fakeStorage()
-  disk.setItem('lineage.v1.__index', '{not json')
+  const first = createCache(disk)
+  first.set('seed', 1)
+  disk.setItem(indexKey(disk), '{not json')
   const cache = createCache(disk)
 
   cache.set('u1', { a: 1 })
@@ -58,8 +72,8 @@ test('LRU evicts the oldest entries beyond the byte cap', () => {
   cache.set('b', 'yyyyyyyyyyyyyyyyyyyy')
   cache.set('c', 'zzzzzzzzzzzzzzzzzzzz')
 
-  assert.equal(disk.getItem('lineage.v1.a'), null)
-  assert.notEqual(disk.getItem('lineage.v1.c'), null)
+  assert.equal(disk.getItem(entryKey(disk, 'a')), null)
+  assert.notEqual(disk.getItem(entryKey(disk, 'c')), null)
 })
 
 test('cache reads refresh LRU recency', () => {
@@ -70,9 +84,9 @@ test('cache reads refresh LRU recency', () => {
   cache.get('a')
   cache.set('c', 'zzzzzzzzzzzzzzzzzzzz')
 
-  assert.notEqual(disk.getItem('lineage.v1.a'), null)
-  assert.equal(disk.getItem('lineage.v1.b'), null)
-  assert.notEqual(disk.getItem('lineage.v1.c'), null)
+  assert.notEqual(disk.getItem(entryKey(disk, 'a')), null)
+  assert.equal(disk.getItem(entryKey(disk, 'b')), null)
+  assert.notEqual(disk.getItem(entryKey(disk, 'c')), null)
 })
 
 test('an entry larger than the disk cap remains available from memory', () => {
@@ -80,7 +94,7 @@ test('an entry larger than the disk cap remains available from memory', () => {
   const cache = createCache(disk, { maxBytes: 10 })
   cache.set('large', 'a value too large for disk')
 
-  assert.equal(disk.getItem('lineage.v1.large'), null)
+  assert.equal(entryKey(disk, 'large'), undefined)
   assert.equal(cache.get('large'), 'a value too large for disk')
   assert.equal(cache.diskDisabled(), false)
 })

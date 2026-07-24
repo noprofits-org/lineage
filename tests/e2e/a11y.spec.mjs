@@ -15,13 +15,13 @@ test('keyboard-only: result selection, arrow navigation, and Enter selection', a
   await stubApi(page, fixtures)
   await page.goto('/')
   await seedAndExpand(page)
-  await page.locator('.node[data-id="seed1"]').focus()
-  await page.locator('.node[data-id="seed1"]').press('ArrowLeft')
+  await page.locator(fixtures.idSelector(fixtures.SEED)).focus()
+  await page.locator(fixtures.idSelector(fixtures.SEED)).press('ArrowLeft')
   const focused = await page.evaluate(() => document.activeElement?.getAttribute('data-id'))
-  expect(['r1', 'r2']).toContain(focused)
+  expect(fixtures.REFS.slice(0, 2).map(paper => paper.paperId)).toContain(focused)
   await expect(page.locator(`.node[data-id="${focused}"]`)).toHaveAttribute('tabindex', '0')
   await expect(page.locator('.node[tabindex="0"]')).toHaveCount(1)
-  await expect(page.locator('.node[data-id="seed1"]')).toHaveAttribute('tabindex', '-1')
+  await expect(page.locator(fixtures.idSelector(fixtures.SEED))).toHaveAttribute('tabindex', '-1')
   await page.setViewportSize({ width: 900, height: 700 })
   await expect(page.locator(`.node[data-id="${focused}"]`)).toHaveAttribute('tabindex', '0')
   await expect(page.locator('.node[tabindex="0"]')).toHaveCount(1)
@@ -33,7 +33,7 @@ test('nodes expose descriptive aria labels and one roving tab stop', async ({ pa
   await stubApi(page, fixtures)
   await page.goto('/')
   await seedAndExpand(page)
-  const seed = page.locator('.node[data-id="seed1"]')
+  const seed = page.locator(fixtures.idSelector(fixtures.SEED))
   await expect(seed).toHaveAttribute('aria-label', /1953.*Molecular Structure/)
   await expect(page.locator('.node[tabindex="0"]')).toHaveCount(1)
 })
@@ -43,9 +43,10 @@ test('reduced motion settles layout before the first assertion', async ({ page }
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await seedAndExpand(page)
-  const y1 = await page.locator('.node[data-id="r1"] circle.dot').getAttribute('cy')
+  const referenceDot = page.locator(`${fixtures.idSelector(fixtures.REFS[0])} circle.dot`)
+  const y1 = await referenceDot.getAttribute('cy')
   await page.waitForTimeout(400)
-  const y2 = await page.locator('.node[data-id="r1"] circle.dot').getAttribute('cy')
+  const y2 = await referenceDot.getAttribute('cy')
   expect(y1).toBe(y2)
 })
 
@@ -55,9 +56,7 @@ test('search results list is arrow-key navigable with roving aria-selected', asy
     fixtures.paper('alt2', 1971, 8, 'Alternative Paper Two'),
   ]
   await stubApi(page, fixtures, {
-    '/paper/search': {
-      json: { total: 3, offset: 0, data: [fixtures.SEED, ...extra] },
-    },
+    crossref: { search: { json: fixtures.crossrefSearch([fixtures.SEED, ...extra]) } },
   })
   await page.goto('/')
   await page.fill('#search', 'nucleic')
@@ -79,7 +78,7 @@ test('search results list is arrow-key navigable with roving aria-selected', asy
   await expect(items.nth(1)).toBeFocused()
 
   await page.keyboard.press('Enter')   // seeds from the focused result
-  await expect(page.locator('.node[data-id="alt1"]')).toHaveCount(1)
+  await expect(page.locator(fixtures.idSelector(extra[0]))).toHaveCount(1)
   await expect(page.locator('#results')).toBeHidden()
 })
 
@@ -91,7 +90,7 @@ test('reduced motion: domain-widening rescale repositions instantly', async ({ p
   await page.press('#search', 'Enter')
   await page.locator('#results li').first().press('Enter')
 
-  const seedDot = page.locator('.node[data-id="seed1"] circle.dot')
+  const seedDot = page.locator(`${fixtures.idSelector(fixtures.SEED)} circle.dot`)
   const cxBefore = await seedDot.getAttribute('cx')
 
   // Expanding references introduces 1949–1950 papers, widening the domain.
@@ -110,6 +109,40 @@ test('reduced motion: domain-widening rescale repositions instantly', async ({ p
   await page.waitForTimeout(400)
   expect(await seedDot.getAttribute('cx')).toBe(cxAfter)
   expect(await seedDot.getAttribute('cy')).toBe(cyAfter)
-  const r1After = await page.locator('.node[data-id="r1"] circle.dot').getAttribute('cx')
+  const r1After = await page.locator(`${fixtures.idSelector(fixtures.REFS[0])} circle.dot`).getAttribute('cx')
   expect(Number(r1After)).toBeLessThan(Number(cxAfter))   // widened domain places 1949 left of 1953
+})
+
+test('large-expansion confirmation is announced, keyboard operable, and reset-bound', async ({ page }) => {
+  let edgeCalls = 0
+  await stubApi(page, fixtures, {
+    index: {
+      citationCount: { json: [{ count: '5001' }] },
+      citations: () => {
+        edgeCalls += 1
+        return { json: [] }
+      },
+    },
+  })
+  await page.goto('/')
+  await page.fill('#search', 'nucleic')
+  await page.press('#search', 'Enter')
+  await page.locator('#results li').first().press('Enter')
+
+  const expand = page.getByTestId('expand-citations')
+  await expand.focus()
+  await expand.press('Enter')
+  await expect(page.locator('#status')).toContainText('activate show citations again to load')
+  expect(edgeCalls).toBe(0)
+
+  await page.locator('#reset').click()
+  await page.fill('#search', 'nucleic')
+  await page.press('#search', 'Enter')
+  await page.locator('#results li').first().press('Enter')
+  await expand.focus()
+  await expand.press('Enter')
+  await expect(page.locator('#status')).toContainText('activate show citations again to load')
+  expect(edgeCalls).toBe(0)
+  await expand.press('Enter')
+  await expect.poll(() => edgeCalls).toBe(1)
 })

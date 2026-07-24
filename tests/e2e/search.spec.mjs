@@ -24,6 +24,25 @@ test('example query buttons run a search', async ({ page }) => {
   await expect(page.locator('#results li').first()).toBeVisible()
 })
 
+test('DOI search uses a Crossref singleton lookup and seeds the canonical paper id', async ({ page }) => {
+  await stubApi(page, fixtures)
+  const crossrefRequests = []
+  page.on('request', request => {
+    if (new URL(request.url()).hostname === 'api.crossref.org') {
+      crossrefRequests.push(request.url())
+    }
+  })
+  await page.goto('/')
+  await page.fill('#search', `https://doi.org/${fixtures.SEED.doi.toUpperCase()}`)
+  await page.press('#search', 'Enter')
+  await expect(page.locator('#results li')).toHaveCount(1)
+  await page.locator('#results li').first().click()
+
+  await expect(page.locator(fixtures.idSelector(fixtures.SEED))).toHaveCount(1)
+  expect(crossrefRequests.some(url => new URL(url).search)).toBe(false)
+  expect(crossrefRequests.filter(url => url.includes('/works/')).length).toBe(1)
+})
+
 test('search results stay inside a narrow viewport', async ({ page }) => {
   await stubApi(page, fixtures)
   await page.setViewportSize({ width: 480, height: 800 })
@@ -37,7 +56,9 @@ test('search results stay inside a narrow viewport', async ({ page }) => {
 })
 
 test('empty search results get a plain message', async ({ page }) => {
-  await stubApi(page, fixtures, { '/paper/search': { json: { total: 0, offset: 0, data: [] } } })
+  await stubApi(page, fixtures, {
+    crossref: { search: { json: fixtures.crossrefSearch([]) } },
+  })
   await page.goto('/')
   await page.fill('#search', 'zzz')
   await page.press('#search', 'Enter')
@@ -52,15 +73,16 @@ test('a newer search hides and supersedes an older in-flight result list', async
   const firstPaper = fixtures.paper('first', 1980, 1, 'First Search Result')
   const secondPaper = fixtures.paper('second', 1990, 2, 'Second Search Result')
   await stubApi(page, fixtures, {
-    '/paper/search': async url => {
-      const query = url.searchParams.get('query')
+    crossref: { search: async url => {
+      const query = url.searchParams.get('query.title')
+        || url.searchParams.get('query.bibliographic')
       if (query === 'first') {
         markFirstStarted()
         await firstGate
-        return { json: { data: [firstPaper] } }
+        return { json: fixtures.crossrefSearch([firstPaper]) }
       }
-      return { json: { data: [secondPaper] } }
-    },
+      return { json: fixtures.crossrefSearch([secondPaper]) }
+    } },
   })
 
   await page.goto('/')

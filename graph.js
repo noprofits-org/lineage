@@ -49,8 +49,8 @@ export function gutterX(width) {
   return width - GUTTER_W / 2
 }
 
-export function nodeRadius(citationCount) {
-  const count = Math.max(0, Number(citationCount) || 0)
+export function nodeRadius(citedByCount) {
+  const count = Math.max(0, Number(citedByCount) || 0)
   return 3 + 3 * Math.min(1, Math.log10(1 + count) / 4)
 }
 
@@ -205,7 +205,7 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
       }
       datum.node = node
       datum.year = node.year
-      datum.r = nodeRadius(node.citationCount)
+      datum.r = nodeRadius(node.crossrefCitedByCount)
       datum.fx = node.year == null ? gutterX(width) : x(node.year)
       datum.x = datum.fx
       datum.y = clamp(datum.y ?? height / 2, 18, height - 54)

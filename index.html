@@ -37,14 +37,14 @@
       <p class="meta" data-testid="insp-meta"></p>
       <p class="counts mono" data-testid="insp-counts"></p>
       <div class="expansion-status" aria-label="Expansion status">
-        <p class="mono" data-testid="references-status" hidden></p>
-        <p class="mono" data-testid="citations-status" hidden></p>
+        <p id="references-status" class="mono" data-testid="references-status" hidden></p>
+        <p id="citations-status" class="mono" data-testid="citations-status" hidden></p>
       </div>
       <p class="abstract" data-testid="insp-abstract"></p>
       <p class="links" data-testid="insp-links"></p>
       <div class="actions">
-        <button type="button" data-testid="expand-references">show references</button>
-        <button type="button" data-testid="expand-citations">show citations</button>
+        <button type="button" data-testid="expand-references" aria-describedby="references-status">show references</button>
+        <button type="button" data-testid="expand-citations" aria-describedby="citations-status">show citations</button>
         <button type="button" data-testid="load-more" hidden>load more</button>
       </div>
       <div class="relations">
@@ -64,6 +64,9 @@
         <p>Edges encode citation, from the citing paper to the cited paper —
           usually, but not always, newer to older. Read the graph left-to-right as
           intellectual influence.</p>
+        <p>Search and paper metadata come from Crossref. Known open citation
+          links come from OpenCitations; coverage and counts may differ between
+          the two sources.</p>
       </div>
     </details>
   </footer>

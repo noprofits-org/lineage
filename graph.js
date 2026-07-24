@@ -3,6 +3,10 @@
 
 export const GUTTER_W = 84
 export const PAD = 24
+export const MIN_NODE_SPACING = 8
+export const MAX_NODE_SPACING = 32
+export const NODE_SPACING_STEP = 4
+export const DEFAULT_NODE_SPACING = 12
 
 export function datedDomain(nodes) {
   let min = Infinity
@@ -54,6 +58,16 @@ export function nodeRadius(citedByCount) {
   return 3 + 3 * Math.min(1, Math.log10(1 + count) / 4)
 }
 
+export function normalizeNodeSpacing(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return DEFAULT_NODE_SPACING
+  const stepped = (
+    MIN_NODE_SPACING
+    + Math.round((numeric - MIN_NODE_SPACING) / NODE_SPACING_STEP) * NODE_SPACING_STEP
+  )
+  return clamp(stepped, MIN_NODE_SPACING, MAX_NODE_SPACING)
+}
+
 export function nearestInDirection(positions, fromId, direction) {
   const from = positions.find(position => position.id === fromId)
   if (!from) return null
@@ -97,7 +111,11 @@ export function nearestInDirection(positions, fromId, direction) {
 
 // -------------------------------------------------------------- D3 renderer
 
-export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } = {}) {
+export function createGraph(svg, {
+  onSelect = () => {},
+  reducedMotion = false,
+  initialSpacing = DEFAULT_NODE_SPACING,
+} = {}) {
   const d3 = window.d3
   if (!d3) throw new Error('D3 failed to load')
 
@@ -131,6 +149,10 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
   let currentSelectedId = null
   let currentFocusedId = null
   let hoveredId = null
+  let nodeSpacing = normalizeNodeSpacing(initialSpacing)
+  let currentHeight = 500
+  let currentDatums = []
+  let currentPlace = () => {}
   let renderedEdges = edgeLayer.selectAll('line.edge')
 
   const dimensions = () => ({
@@ -138,8 +160,49 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
     height: Math.max(240, svg.clientHeight || 500),
   })
 
+  function restartSimulation(alpha = 0.8) {
+    if (!simulation) return
+    simulation.alpha(alpha)
+    if (reducedMotion) {
+      simulation.stop()
+      simulation.tick(160)
+      currentPlace()
+    } else {
+      simulation.restart()
+    }
+  }
+
+  const verticalDrag = d3.drag()
+    .on('start', function(event, datum) {
+      datum._dragStartY = datum.y
+      datum._dragWasPositioned = datum.userPositioned === true
+      datum._dragMoved = false
+    })
+    .on('drag', function(event, datum) {
+      if (Math.abs(event.y - datum._dragStartY) < 2 && !datum._dragMoved) return
+      if (!datum._dragMoved) {
+        datum._dragMoved = true
+        if (!reducedMotion && simulation) simulation.alphaTarget(0.18).restart()
+      }
+      datum.userPositioned = true
+      datum.fy = clamp(event.y, 18, currentHeight - 54)
+      datum.y = datum.fy
+      d3.select(this).classed('positioned', true)
+      currentPlace()
+    })
+    .on('end', function(event, datum) {
+      if (!reducedMotion && simulation && !event.active) simulation.alphaTarget(0)
+      if (!datum._dragMoved && !datum._dragWasPositioned) datum.fy = null
+      delete datum._dragStartY
+      delete datum._dragWasPositioned
+      delete datum._dragMoved
+      if (datum.userPositioned) restartSimulation(0.45)
+      currentPlace()
+    })
+
   function update({ nodes, edges, selectedId }) {
     const { width, height } = dimensions()
+    currentHeight = height
     const selectionChanged = selectedId !== currentSelectedId
     currentSelectedId = selectedId
     if (selectionChanged) currentFocusedId = selectedId
@@ -152,6 +215,8 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
       previousDated = null
       previousWidth = width
       currentFocusedId = null
+      currentDatums = []
+      currentPlace = () => {}
       edgeLayer.selectAll('*').remove()
       nodeLayer.selectAll('*').remove()
       axisLayer.selectAll('*').remove()
@@ -208,9 +273,11 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
       datum.r = nodeRadius(node.crossrefCitedByCount)
       datum.fx = node.year == null ? gutterX(width) : x(node.year)
       datum.x = datum.fx
-      datum.y = clamp(datum.y ?? height / 2, 18, height - 54)
+      if (datum.fy != null) datum.fy = clamp(datum.fy, 18, height - 54)
+      datum.y = clamp(datum.fy ?? datum.y ?? height / 2, 18, height - 54)
       return datum
     })
+    currentDatums = datums
 
     const links = edges
       .filter(edge => nodesById.has(edge.citing) && nodesById.has(edge.cited))
@@ -235,7 +302,9 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
     enteredNodes.append('circle').attr('class', 'ring')
     enteredNodes.append('text')
     enteredNodes
-      .on('click', (event, datum) => onSelect(datum.id))
+      .on('click', (event, datum) => {
+        if (!event.defaultPrevented) onSelect(datum.id)
+      })
       .on('focus', (event, datum) => {
         currentFocusedId = datum.id
       })
@@ -253,6 +322,7 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
         hoveredId = null
         styleEdges()
       })
+      .call(verticalDrag)
 
     const renderedNodes = enteredNodes.merge(nodeJoin)
       .classed('selected', datum => datum.id === selectedId)
@@ -262,6 +332,7 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
         || datum.node.expansion?.references?.displayedCount > 0
         || datum.node.expansion?.citations?.displayedCount > 0
       ))
+      .classed('positioned', datum => datum.userPositioned === true)
       .attr('tabindex', datum => (datum.id === currentFocusedId ? 0 : -1))
       .attr('aria-label', datum => (
         `${datum.node.authors[0] || 'Unknown author'}, ${datum.year ?? 'undated'}: ${datum.node.title}`
@@ -284,7 +355,7 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
 
     function place() {
       for (const datum of datums) {
-        datum.y = clamp(datum.y, 18, height - 54)
+        datum.y = clamp(datum.fy ?? datum.y, 18, height - 54)
       }
       renderedNodes.selectAll('circle')
         .attr('cx', datum => datum.fx)
@@ -299,10 +370,11 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
         .attr('x2', edge => citedEndpoint(edge).x)
         .attr('y2', edge => citedEndpoint(edge).y)
     }
+    currentPlace = place
 
     simulation?.stop()
     simulation = d3.forceSimulation(datums)
-      .force('collide', d3.forceCollide(datum => datum.r + 8).iterations(2))
+      .force('collide', d3.forceCollide(datum => datum.r + nodeSpacing).iterations(2))
       .force('y', d3.forceY(height / 2 - 14).strength(0.05))
       .force('link', d3.forceLink(links).id(datum => datum.id).strength(0))
       .on('tick', place)
@@ -328,7 +400,43 @@ export function createGraph(svg, { onSelect = () => {}, reducedMotion = false } 
         id: datum.id,
         x: datum.fx ?? datum.x,
         y: datum.y,
+        positioned: datum.userPositioned === true,
       }))
+    },
+    setSpacing(value) {
+      nodeSpacing = normalizeNodeSpacing(value)
+      if (simulation) {
+        simulation.force(
+          'collide',
+          d3.forceCollide(datum => datum.r + nodeSpacing).iterations(2),
+        )
+        restartSimulation(0.9)
+      }
+      return nodeSpacing
+    },
+    nudgeNode(id, deltaY) {
+      const datum = nodesById.get(id)
+      if (!datum || !Number.isFinite(Number(deltaY))) return null
+      datum.userPositioned = true
+      datum.fy = clamp((datum.fy ?? datum.y) + Number(deltaY), 18, currentHeight - 54)
+      datum.y = datum.fy
+      nodeLayer.selectAll('g.node')
+        .filter(candidate => candidate.id === id)
+        .classed('positioned', true)
+      restartSimulation(0.45)
+      currentPlace()
+      return datum.y
+    },
+    resetVerticalPositions() {
+      currentDatums.forEach((datum, index) => {
+        datum.userPositioned = false
+        datum.fy = null
+        datum.y = initialY(datum.id, index, currentHeight)
+        datum.vy = 0
+      })
+      nodeLayer.selectAll('g.node').classed('positioned', false)
+      restartSimulation(1)
+      currentPlace()
     },
   }
 }

@@ -19,7 +19,15 @@
   </header>
 
   <main>
-    <svg id="canvas" role="application" aria-label="Citation graph. Use arrow keys to move between papers, Enter to select."></svg>
+    <svg id="canvas" role="application" aria-label="Citation graph. Use arrow keys to move between papers, Enter to select, and Shift plus Up or Down to reposition a paper."></svg>
+    <div id="layout-controls" role="group" aria-label="Timeline layout controls" hidden>
+      <label for="node-spacing">node spacing</label>
+      <input id="node-spacing" data-testid="node-spacing" type="range"
+             min="8" max="32" step="4" value="12"
+             aria-valuetext="12 pixels between nodes">
+      <output id="node-spacing-value" for="node-spacing">12px</output>
+      <button id="reset-layout" type="button">reflow</button>
+    </div>
     <div id="empty">
       <p>Search for a paper, then click nodes to trace what it cites and who cites it.</p>
       <p class="convention">Edges encode citation, from the citing paper to the cited paper —
@@ -67,6 +75,9 @@
         <p>Search and paper metadata come from Crossref. Known open citation
           links come from OpenCitations; coverage and counts may differ between
           the two sources.</p>
+        <p>Drag papers up or down to arrange a crowded year. The node-spacing
+          control changes the automatic separation; reflow restores the
+          automatic vertical layout.</p>
       </div>
     </details>
   </footer>

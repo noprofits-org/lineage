@@ -38,6 +38,25 @@ test('nodes expose descriptive aria labels and one roving tab stop', async ({ pa
   await expect(page.locator('.node[tabindex="0"]')).toHaveCount(1)
 })
 
+test('Shift plus vertical arrows repositions a focused paper without changing its year', async ({ page }) => {
+  await stubApi(page, fixtures)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/')
+  await seedAndExpand(page)
+  const seed = page.locator(fixtures.idSelector(fixtures.SEED))
+  const dot = seed.locator('circle.dot')
+  await seed.focus()
+  const beforeX = Number(await dot.getAttribute('cx'))
+  const beforeY = Number(await dot.getAttribute('cy'))
+
+  await seed.press('Shift+ArrowDown')
+
+  expect(Number(await dot.getAttribute('cx'))).toBeCloseTo(beforeX, 5)
+  expect(Number(await dot.getAttribute('cy'))).toBeGreaterThan(beforeY)
+  await expect(seed).toHaveClass(/positioned/)
+  await expect(page.locator('#status')).toHaveText('paper moved down')
+})
+
 test('reduced motion settles layout before the first assertion', async ({ page }) => {
   await stubApi(page, fixtures)
   await page.emulateMedia({ reducedMotion: 'reduce' })

@@ -16,6 +16,7 @@ test('reset clears the graph and restores the empty state', async ({ page }) => 
   await expect(page.locator('.node')).toHaveCount(0)
   await expect(page.locator('#empty')).toBeVisible()
   await expect(page.locator('#inspector')).toBeHidden()
+  await expect(page.locator('#layout-controls')).toBeHidden()
   await expect(page.locator('#search')).toBeFocused()
 })
 

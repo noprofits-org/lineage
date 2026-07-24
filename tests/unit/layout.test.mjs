@@ -6,8 +6,13 @@ import {
   makeXScale,
   gutterX,
   nodeRadius,
+  normalizeNodeSpacing,
   nearestInDirection,
+  DEFAULT_NODE_SPACING,
   GUTTER_W,
+  MAX_NODE_SPACING,
+  MIN_NODE_SPACING,
+  NODE_SPACING_STEP,
   PAD,
 } from '../../graph.js'
 
@@ -90,6 +95,18 @@ test('nodeRadius safely treats missing and negative counts as zero', () => {
   assert.equal(nodeRadius(null), 3)
   assert.equal(nodeRadius(undefined), 3)
   assert.equal(nodeRadius(-10), 3)
+})
+
+test('node spacing normalizes to the supported stepped range', () => {
+  assert.equal(DEFAULT_NODE_SPACING, 12)
+  assert.equal(MIN_NODE_SPACING, 8)
+  assert.equal(MAX_NODE_SPACING, 32)
+  assert.equal(NODE_SPACING_STEP, 4)
+  assert.equal(normalizeNodeSpacing('20'), 20)
+  assert.equal(normalizeNodeSpacing(21), 20)
+  assert.equal(normalizeNodeSpacing(-10), MIN_NODE_SPACING)
+  assert.equal(normalizeNodeSpacing(100), MAX_NODE_SPACING)
+  assert.equal(normalizeNodeSpacing('not a number'), DEFAULT_NODE_SPACING)
 })
 
 test('nearestInDirection picks the nearest node in the 45-degree cone', () => {

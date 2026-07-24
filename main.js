@@ -8,7 +8,11 @@ import {
   canonicalPaperId,
   timeStratifiedOrder,
 } from './data.js'
-import { createGraph, nearestInDirection } from './graph.js'
+import {
+  createGraph,
+  nearestInDirection,
+  DEFAULT_NODE_SPACING,
+} from './graph.js'
 
 export const NODE_CAP = 300
 export const BATCH = 25
@@ -935,6 +939,10 @@ export function init(options = {}) {
     retry: byId('retry'),
     reset: byId('reset'),
     close: byId('inspector-close'),
+    layoutControls: byId('layout-controls'),
+    spacing: byId('node-spacing'),
+    spacingValue: byId('node-spacing-value'),
+    resetLayout: byId('reset-layout'),
   }
 
   client = new DataClient({
@@ -972,6 +980,17 @@ export function init(options = {}) {
   elements.reset.addEventListener('click', () => {
     reset()
     elements.search.focus()
+  })
+  elements.spacing.addEventListener('input', () => {
+    const spacing = graph.setSpacing(elements.spacing.value)
+    elements.spacing.value = String(spacing)
+    elements.spacingValue.value = `${spacing}px`
+    elements.spacing.setAttribute('aria-valuetext', `${spacing} pixels between nodes`)
+    setStatus(`node spacing set to ${spacing} pixels`)
+  })
+  elements.resetLayout.addEventListener('click', () => {
+    graph.resetVerticalPositions()
+    setStatus('automatic vertical layout restored')
   })
   elements.retry.addEventListener('click', () => {
     const entry = pendingRetries.entries().next().value
@@ -1087,6 +1106,7 @@ function seed(paper) {
   elements.results.hidden = true
   elements.empty.hidden = true
   elements.reset.hidden = false
+  elements.layoutControls.hidden = false
   const node = addPaper(state, paper)
   state.seedId = node.paperId
   select(node.paperId)
@@ -1613,6 +1633,7 @@ function reset({ showEmpty = true, clearSearch = true } = {}) {
   elements.inspector.hidden = true
   elements.empty.hidden = !showEmpty
   elements.reset.hidden = true
+  elements.layoutControls.hidden = true
   updateRetryButton()
   if (clearSearch) elements.search.value = ''
   setStatus('ready')
@@ -1620,6 +1641,15 @@ function reset({ showEmpty = true, clearSearch = true } = {}) {
 }
 
 function handleCanvasKeydown(event) {
+  const fromId = document.activeElement?.getAttribute?.('data-id') || state.selected
+  if (!fromId) return
+  if (event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    event.preventDefault()
+    graph.nudgeNode(fromId, event.key === 'ArrowUp' ? -DEFAULT_NODE_SPACING : DEFAULT_NODE_SPACING)
+    setStatus(`paper moved ${event.key === 'ArrowUp' ? 'up' : 'down'}`)
+    return
+  }
+
   const direction = {
     ArrowLeft: 'left',
     ArrowRight: 'right',
@@ -1628,8 +1658,6 @@ function handleCanvasKeydown(event) {
   }[event.key]
   if (!direction) return
 
-  const fromId = document.activeElement?.getAttribute?.('data-id') || state.selected
-  if (!fromId) return
   event.preventDefault()
   const next = nearestInDirection(graph.positions(), fromId, direction)
   if (next) graph.focusNode(next)

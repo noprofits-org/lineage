@@ -67,6 +67,17 @@ header {
 /* main area */
 main { flex: 1; display: flex; min-height: 0; position: relative; }
 #canvas { flex: 1; min-width: 0; display: block; }
+#layout-controls {
+  position: absolute; z-index: 4; top: 10px; left: 12px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
+}
+#layout-controls label { white-space: nowrap; }
+#node-spacing { width: 112px; accent-color: var(--accent); cursor: ew-resize; }
+#node-spacing-value { min-width: 30px; color: var(--ink); }
+#reset-layout { padding: 2px 7px; font-size: 11px; }
 
 /* graph marks (SVG) */
 .edge { stroke: var(--ink-soft); stroke-width: 0.75; fill: none; }
@@ -75,13 +86,16 @@ main { flex: 1; display: flex; min-height: 0; position: relative; }
 .cited-tick { fill: none; stroke: var(--ink); stroke-width: 1; }
 .node circle.dot { fill: var(--ink); stroke: none; }
 .node.undated circle.dot { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
-.node circle.hit { fill: transparent; cursor: pointer; pointer-events: all; }
+.node circle.hit { fill: transparent; cursor: ns-resize; pointer-events: all; }
 .node.selected circle.dot { fill: var(--accent); }
 .node.selected circle.ring, .node:focus-visible circle.ring {
   fill: none; stroke: var(--ink); stroke-width: 1; visibility: visible;
 }
 .node circle.ring { visibility: hidden; }
 .node.selected circle.ring { stroke: var(--accent); }
+.node.positioned:not(.selected) circle.ring {
+  visibility: visible; stroke: var(--ink-faint); stroke-dasharray: 2 2;
+}
 .node text {
   font-family: var(--mono); font-size: 11px; fill: var(--ink);
   paint-order: stroke; stroke: var(--paper); stroke-width: 3px;
@@ -125,6 +139,9 @@ main { flex: 1; display: flex; min-height: 0; position: relative; }
 #inspector .relations ul { margin: 0; padding-left: 18px; font-size: 13px; }
 #inspector-close { position: absolute; top: 8px; right: 8px; border-color: var(--hairline); }
 @media (max-width: 719px) {
+  #layout-controls { right: 12px; }
+  #layout-controls label { position: absolute; width: 1px; height: 1px; overflow: hidden; }
+  #node-spacing { flex: 1; width: auto; }
   #inspector {
     position: absolute; left: 0; right: 0; bottom: 0; width: auto;
     max-height: 55%; border-left: 0; border-top: 1px solid var(--ink);

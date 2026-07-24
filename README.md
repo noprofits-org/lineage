@@ -31,6 +31,9 @@ index.html       # site root
   range before metadata hydration. “Representative” never means globally top
   cited, and Crossref's cited-by proxy is kept separate from OpenCitations link
   totals.
+- Papers stay pinned to their publication year but can be dragged vertically.
+  A node-spacing control adjusts automatic collision separation, and reflow
+  restores the automatic vertical layout.
 - Expansions above 5,000 links require a second activation; expansions above
   25,000 stop at a browser-safety boundary. Raw edge arrays are never written
   to `localStorage`.

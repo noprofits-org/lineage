@@ -100,6 +100,80 @@ test('hit areas are at least 24px even though dots are small', async ({ page }) 
   expect(Number(r)).toBeGreaterThanOrEqual(12)
 })
 
+test('a paper can be dragged vertically without moving off its year', async ({ page }) => {
+  await stubApi(page, fixtures)
+  await seedAndExpandRefs(page)
+  const node = page.locator(fixtures.idSelector(fixtures.REFS[0]))
+  const hit = node.locator('circle.hit')
+  const beforeX = Number(await hit.getAttribute('cx'))
+  const beforeY = Number(await hit.getAttribute('cy'))
+  const box = await hit.boundingBox()
+  expect(box).not.toBeNull()
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 80, { steps: 5 })
+  await page.mouse.up()
+
+  await expect.poll(async () => Number(await hit.getAttribute('cy'))).toBeGreaterThan(beforeY + 50)
+  expect(Number(await hit.getAttribute('cx'))).toBeCloseTo(beforeX, 5)
+  await expect(node).toHaveClass(/positioned/)
+
+  await page.locator('#reset-layout').click()
+  await expect(node).not.toHaveClass(/positioned/)
+  await expect(page.locator('#status')).toHaveText('automatic vertical layout restored')
+})
+
+test('node spacing control increases separation within a crowded year', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const sameYear = Array.from({ length: 4 }, (_, index) =>
+    fixtures.paper(`same-year-spacing-${index}`, 1950, index + 1, `Same Year ${index}`))
+  const details = new Map(sameYear.map(paper => [
+    paper.doi,
+    fixtures.crossrefDetail(paper),
+  ]))
+  await stubApi(page, fixtures, {
+    index: {
+      referenceCount: { json: [{ count: String(sameYear.length) }] },
+      references: {
+        json: sameYear.map((paper, index) =>
+          fixtures.edge(fixtures.SEED, paper, { oci: `spacing-${index}` })),
+      },
+    },
+    crossref: {
+      detail: (url, { doi }, fallback) => ({ json: details.get(doi) ?? fallback }),
+    },
+  })
+  await page.goto('/')
+  await page.fill('#search', 'nucleic')
+  await page.press('#search', 'Enter')
+  await page.locator('#results li').first().click()
+  await page.getByTestId('expand-references').click()
+  await expect(page.locator('.node')).toHaveCount(5)
+
+  const sameYearDots = page.locator(
+    sameYear.map(paper => `${fixtures.idSelector(paper)} circle.dot`).join(','),
+  )
+  const minimumGap = async () => {
+    const positions = (await sameYearDots.all()).map(async dot =>
+      Number(await dot.getAttribute('cy')))
+    const sorted = (await Promise.all(positions)).sort((a, b) => a - b)
+    return Math.min(...sorted.slice(1).map((value, index) => value - sorted[index]))
+  }
+  const compactGap = await minimumGap()
+  await page.getByTestId('node-spacing').evaluate(input => {
+    input.value = '32'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+
+  await expect(page.locator('#node-spacing-value')).toHaveText('32px')
+  await expect(page.getByTestId('node-spacing')).toHaveAttribute(
+    'aria-valuetext',
+    '32 pixels between nodes',
+  )
+  await expect.poll(minimumGap).toBeGreaterThan(compactGap + 20)
+})
+
 test('resizing recomputes the year scale and keeps the undated gutter visible', async ({ page }) => {
   await stubApi(page, fixtures)
   await seedAndExpandRefs(page)
